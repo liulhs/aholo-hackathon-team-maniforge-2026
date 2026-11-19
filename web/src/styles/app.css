@@ -1,0 +1,933 @@
+@import './tokens.css';
+@import './story.css';
+@import './carousel.css';
+@import './player.css';
+@import './lux3d.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--color-window);
+  color: var(--color-ink);
+  font-family: var(--font-zh);
+  font-size: var(--text-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p,
+ol,
+ul {
+  margin: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- stage: the canvas fills the window, a HUD floats over it ----------
+   Three columns: a left rail (title, guide, shelf share one left edge), the open scene, and a
+   right column (stats and controls share one right edge). Every panel edge sits on --gutter. */
+.stage {
+  /* HUD palette: frosted pale glass over the white room; ink edges and ticks */
+  --hud-fill: rgba(246, 248, 250, 0.8);
+  --hud-fill-strong: rgba(250, 251, 252, 0.9);
+  --hud-edge: rgba(27, 39, 51, 0.14);
+  --hud-edge-hot: rgba(27, 39, 51, 0.4);
+  --hud-text: #1b2733;
+  --hud-text-soft: #5b6b7a;
+  --hud-tick: #1b2733;
+  --hud-radius: 2px;
+  --hud-tick-size: 9px;
+  --hud-blur: blur(14px) saturate(1.2);
+  --hud-shadow: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 16px 34px -22px rgba(27, 39, 51, 0.45);
+  --color-lifted: #128055;
+  --color-missed: #b2660a;
+  --rail: 20rem;
+
+  position: relative;
+  height: 100vh;
+  height: 100svh;
+  min-height: 520px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, var(--rail)) minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    'masthead orbit tally'
+    'guide . tally'
+    'status status status'
+    'shelf shelf controls'
+    'cue cue cue';
+  padding: calc(var(--gutter) + env(safe-area-inset-top)) calc(var(--gutter) + env(safe-area-inset-right))
+    calc(var(--gutter) + env(safe-area-inset-bottom)) calc(var(--gutter) + env(safe-area-inset-left));
+  gap: 12px var(--gutter);
+  pointer-events: none; /* the canvas underneath takes drags; UI pieces opt back in */
+}
+
+.scene {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+}
+
+.scene[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+/* the viewfinder: four registration brackets framing the live area, half a gutter inside the window */
+.viewfinder {
+  position: absolute;
+  inset: calc(var(--gutter) / 2);
+  z-index: 1;
+  pointer-events: none;
+  --arm: 22px;
+  --line: 1.5px;
+  --ink: rgba(27, 39, 51, 0.7);
+  background:
+    linear-gradient(var(--ink) 0 0) top left / var(--arm) var(--line),
+    linear-gradient(var(--ink) 0 0) top left / var(--line) var(--arm),
+    linear-gradient(var(--ink) 0 0) top right / var(--arm) var(--line),
+    linear-gradient(var(--ink) 0 0) top right / var(--line) var(--arm),
+    linear-gradient(var(--ink) 0 0) bottom left / var(--arm) var(--line),
+    linear-gradient(var(--ink) 0 0) bottom left / var(--line) var(--arm),
+    linear-gradient(var(--ink) 0 0) bottom right / var(--arm) var(--line),
+    linear-gradient(var(--ink) 0 0) bottom right / var(--line) var(--arm);
+  background-repeat: no-repeat;
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.8)); /* stays visible over dark chairs and table legs */
+}
+
+.masthead,
+.guide,
+.orbit-hint,
+.tally,
+.status,
+.shelf,
+.controls {
+  position: relative;
+  z-index: 2;
+}
+
+/* ---------- the HUD panel: smoked glass, hairline edge, two corner ticks ---------- */
+.hud {
+  border: 1px solid var(--hud-edge);
+  border-radius: var(--hud-radius);
+  background: var(--hud-fill);
+  backdrop-filter: var(--hud-blur);
+  -webkit-backdrop-filter: var(--hud-blur);
+  box-shadow: var(--hud-shadow);
+  color: var(--hud-text);
+}
+
+.hud::before,
+.hud::after {
+  content: '';
+  position: absolute;
+  width: var(--hud-tick-size);
+  height: var(--hud-tick-size);
+  pointer-events: none;
+}
+
+.hud::before {
+  top: -1px;
+  left: -1px;
+  border-top: 2px solid var(--hud-tick);
+  border-left: 2px solid var(--hud-tick);
+}
+
+.hud::after {
+  right: -1px;
+  bottom: -1px;
+  border-right: 2px solid var(--hud-tick);
+  border-bottom: 2px solid var(--hud-tick);
+}
+
+/* ---------- masthead ---------- */
+.masthead {
+  grid-area: masthead;
+  align-self: start;
+  padding: 16px 18px 18px;
+}
+
+.masthead__title {
+  white-space: nowrap;
+  font-family: var(--font-zh);
+  font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.04em;
+}
+
+.masthead__en {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-small);
+  letter-spacing: 0.08em;
+  color: var(--color-moving);
+}
+
+.masthead__lede {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hud-edge);
+  font-size: var(--text-small);
+  line-height: 1.6;
+  color: var(--hud-text-soft);
+}
+
+/* ---------- guide: operating instructions, folds away ---------- */
+.guide {
+  grid-area: guide;
+  align-self: start;
+  justify-self: stretch;
+  font-size: var(--text-small);
+  line-height: 1.5;
+  pointer-events: auto;
+}
+
+.guide[open] {
+  max-height: 100%; /* its grid row is what is left of the scene's height: scroll inside, never overlap */
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none; /* still scrolls by wheel or touch on short windows, without the bar */
+}
+
+.guide[open]::-webkit-scrollbar {
+  display: none;
+}
+
+/* more text below the fold: fade the bottom edge so the visitor knows to scroll */
+.guide[data-more] {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 48px), transparent);
+}
+
+.guide:not([open]) {
+  justify-self: start;
+}
+
+.guide__toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  font-size: var(--text-body);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  list-style: none;
+}
+
+.guide__toggle::-webkit-details-marker {
+  display: none;
+}
+
+/* a status LED rather than an icon: lit while the guide is open */
+.guide__toggle::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  background: var(--hud-text-soft);
+  transform: rotate(45deg);
+}
+
+.guide[open] .guide__toggle::before {
+  background: var(--color-moving);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--color-moving) 60%, transparent);
+}
+
+.guide__toggle::after {
+  content: '收起';
+  margin-left: auto;
+  padding-left: 16px;
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--hud-text-soft);
+}
+
+.guide:not([open]) .guide__toggle::after {
+  content: '展开';
+}
+
+.guide__toggle:hover::after {
+  color: var(--hud-text);
+}
+
+.guide__toggle:focus-visible {
+  outline: 2px solid var(--color-moving);
+  outline-offset: 2px;
+}
+
+.guide__steps {
+  list-style: none;
+  counter-reset: guide;
+  margin: 0 18px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--hud-edge);
+  display: grid;
+  gap: 8px;
+}
+
+.guide__step {
+  counter-increment: guide;
+  display: grid;
+  grid-template-columns: 26px 1fr;
+  column-gap: 10px;
+}
+
+.guide__step::before {
+  content: counter(guide, decimal-leading-zero);
+  grid-row: span 2;
+  padding-top: 1px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-moving);
+}
+
+.guide__what {
+  font-weight: 700;
+  color: var(--hud-text);
+}
+
+.guide__how {
+  color: var(--hud-text-soft);
+}
+
+/* the two steps every visitor needs read first: larger, in the accent; the rest stay quiet */
+.guide__step--main .guide__what {
+  font-size: var(--text-body);
+  color: var(--color-accent);
+}
+
+.guide__step--main .guide__how {
+  color: var(--hud-text);
+}
+
+.guide__step:not(.guide__step--main)::before {
+  color: var(--hud-text-soft);
+}
+
+.guide__keys {
+  margin: 12px 18px 0;
+  padding: 10px 0 14px;
+  border-top: 1px solid var(--hud-edge);
+  color: var(--hud-text-soft);
+}
+
+.guide kbd {
+  display: inline-block;
+  min-width: 1.8em;
+  margin: 0 1px;
+  padding: 0 5px;
+  border: 1px solid var(--hud-edge-hot);
+  border-bottom-width: 2px;
+  border-radius: var(--hud-radius);
+  background: #fff;
+  color: var(--hud-text);
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* ---------- orbit hint: how to turn the view, next to the stats ---------- */
+.orbit-hint {
+  grid-area: orbit;
+  justify-self: end;
+  align-self: start;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 15rem;
+  padding: 10px 16px 10px 12px;
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.orbit-hint__icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.orbit-hint__sphere {
+  fill: var(--color-accent-wash);
+  stroke: var(--hud-text);
+  stroke-width: 1.5;
+}
+
+.orbit-hint__line {
+  stroke: var(--hud-text-soft);
+  stroke-width: 1;
+}
+
+.orbit-hint__orbit {
+  stroke: var(--color-accent);
+  stroke-width: 2;
+}
+
+/* the half of the ring behind the sphere: fainter, so the ring reads as going round it */
+.orbit-hint__orbit--back {
+  stroke-opacity: 0.35;
+}
+
+/* ---------- tally: the measured number ---------- */
+.tally {
+  grid-area: tally;
+  justify-self: end;
+  align-self: start;
+  width: 16rem;
+  padding: 14px 18px;
+}
+
+.tally__number {
+  font-family: var(--font-display);
+  font-size: var(--text-stat);
+  font-weight: 800;
+  font-variation-settings: 'opsz' 96;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.tally__caption {
+  margin-top: 8px;
+  font-size: var(--text-small);
+  font-weight: 600;
+  text-align: right;
+  color: var(--hud-text);
+}
+
+.tally__rows {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--hud-edge);
+  display: grid;
+  gap: 4px;
+  font-size: var(--text-small);
+  line-height: 1.45;
+}
+
+.tally__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tally__row[hidden] {
+  display: none;
+}
+
+.tally__row dt {
+  color: var(--hud-text-soft);
+}
+
+.tally__row dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- status readout ---------- */
+.status {
+  grid-area: status;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px 8px 14px;
+  border: 1px solid var(--hud-edge);
+  border-left: 3px solid var(--status-color);
+  border-radius: var(--hud-radius);
+  background: var(--hud-fill-strong);
+  backdrop-filter: var(--hud-blur);
+  -webkit-backdrop-filter: var(--hud-blur);
+  box-shadow: var(--hud-shadow);
+  color: var(--hud-text);
+  font-size: var(--text-body);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  --status-color: var(--hud-text-soft);
+}
+
+.status__dot {
+  width: 8px;
+  height: 8px;
+  background: var(--status-color);
+  flex: none;
+}
+
+.status[data-phase='reaching'],
+.status[data-phase='grasping'],
+.status[data-phase='lifting'],
+.status[data-phase='settling'] {
+  --status-color: var(--color-moving);
+}
+
+.status[data-phase='recovering'],
+.status[data-phase='homing'],
+.status[data-phase='missed'],
+.status[data-phase='error'] {
+  --status-color: var(--color-missed);
+}
+
+.status[data-phase='lifted'] {
+  --status-color: var(--color-lifted);
+}
+
+.status[data-phase='lifted'],
+.status[data-phase='missed'] {
+  color: var(--status-color);
+}
+
+.status[data-phase='reaching'] .status__dot,
+.status[data-phase='grasping'] .status__dot,
+.status[data-phase='lifting'] .status__dot,
+.status[data-phase='recovering'] .status__dot,
+.status[data-phase='homing'] .status__dot {
+  animation: blink 0.9s steps(2, jump-none) infinite;
+}
+
+@keyframes blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.25;
+  }
+}
+
+/* ---------- shelf: the object picker ---------- */
+.shelf {
+  grid-area: shelf;
+  align-self: end;
+  min-width: 0;
+  pointer-events: auto;
+}
+
+.shelf__list {
+  list-style: none;
+  padding: 8px 0 0; /* room for the raised card; left edge flush with the panels above */
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+}
+
+.shelf__list::-webkit-scrollbar {
+  display: none;
+}
+
+.card {
+  scroll-snap-align: start;
+  position: relative;
+  width: 92px;
+  flex: none;
+  padding: 6px 6px 8px;
+  border: 1px solid var(--hud-edge);
+  border-radius: var(--hud-radius);
+  background: var(--hud-fill);
+  backdrop-filter: var(--hud-blur);
+  -webkit-backdrop-filter: var(--hud-blur);
+  color: var(--hud-text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    transform var(--duration-normal) var(--ease-out),
+    border-color var(--duration-fast) linear;
+}
+
+/* the specimen plate: a fine measuring grid behind each object */
+.card__thumb {
+  display: block;
+  width: 78px;
+  height: 78px;
+  margin: 0 auto;
+  border-radius: 1px;
+  background:
+    linear-gradient(rgba(14, 22, 30, 0.06) 1px, transparent 1px) 0 0 / 13px 13px,
+    linear-gradient(90deg, rgba(14, 22, 30, 0.06) 1px, transparent 1px) 0 0 / 13px 13px,
+    #ffffff;
+  object-fit: contain;
+}
+
+.card__name {
+  display: block;
+  margin-top: 6px;
+  font-size: var(--text-small);
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--hud-text-soft);
+}
+
+.card:hover:not(:disabled) {
+  border-color: var(--hud-edge-hot);
+  transform: translateY(-3px);
+}
+
+.card:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+/* selected: a blue lock-on */
+.card[aria-pressed='true'] {
+  border-color: var(--color-pick);
+  transform: translateY(-6px);
+  box-shadow:
+    0 0 0 1px var(--color-pick),
+    0 12px 28px -14px var(--color-pick);
+}
+
+.card[aria-pressed='true'] .card__thumb {
+  background:
+    linear-gradient(color-mix(in srgb, var(--color-pick) 14%, transparent) 1px, transparent 1px) 0 0 / 13px 13px,
+    linear-gradient(90deg, color-mix(in srgb, var(--color-pick) 14%, transparent) 1px, transparent 1px) 0 0 / 13px 13px,
+    var(--color-pick-wash);
+}
+
+.card:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.card:focus-visible,
+.button:focus-visible {
+  outline: 2px solid var(--color-moving);
+  outline-offset: 3px;
+}
+
+/* ---------- buttons: light by default (the story uses them too), HUD inside the stage ---------- */
+.button {
+  appearance: none;
+  border: 1px solid var(--color-card-edge);
+  border-radius: var(--radius-capsule);
+  padding: 10px 16px;
+  background: var(--color-card);
+  color: var(--color-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-lift);
+  transition:
+    transform var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) linear;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(1px);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button--quiet {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.controls {
+  grid-area: controls;
+  align-self: end;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  pointer-events: auto;
+}
+
+.controls .button {
+  border-color: var(--hud-edge);
+  border-radius: var(--hud-radius);
+  background: var(--hud-fill);
+  backdrop-filter: var(--hud-blur);
+  -webkit-backdrop-filter: var(--hud-blur);
+  box-shadow: var(--hud-shadow);
+  color: var(--hud-text);
+  letter-spacing: 0.02em;
+}
+
+.controls .button:hover:not(:disabled) {
+  border-color: var(--hud-edge-hot);
+}
+
+.controls .button[aria-pressed='true'] {
+  border-color: var(--color-pick);
+  box-shadow:
+    inset 3px 0 0 var(--color-pick),
+    var(--hud-shadow);
+}
+
+/* ---------- loader ---------- */
+.loader {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  gap: 14px;
+  background: var(--color-window);
+  pointer-events: auto;
+  transition: opacity var(--duration-normal) linear;
+}
+
+.loader[data-done='true'] {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loader[hidden] {
+  display: none;
+}
+
+.loader__text {
+  color: var(--color-ink-soft);
+  text-align: center;
+}
+
+.loader__bar {
+  width: min(280px, 70vw);
+  height: 4px;
+  background: var(--color-card-edge);
+  overflow: hidden;
+}
+
+.loader__fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--color-pick);
+  transform-origin: left;
+  transform: scaleX(var(--progress, 0));
+  transition: transform var(--duration-fast) linear;
+}
+
+/* ---------- scroll cue: the way down to the story ---------- */
+.scroll-cue {
+  grid-area: cue;
+  justify-self: center;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  padding: 5px 14px;
+  border: 1px solid var(--hud-edge);
+  border-radius: var(--hud-radius);
+  background: var(--hud-fill);
+  backdrop-filter: var(--hud-blur);
+  -webkit-backdrop-filter: var(--hud-blur);
+  font-size: var(--text-small);
+  font-weight: 600;
+  color: var(--hud-text);
+  text-decoration: none;
+  transition: border-color var(--duration-fast) linear;
+}
+
+.scroll-cue::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 10px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-3px) rotate(45deg);
+}
+
+.scroll-cue:hover {
+  border-color: var(--hud-edge-hot);
+}
+
+.scroll-cue:focus-visible {
+  outline: 2px solid var(--color-moving);
+  outline-offset: 3px;
+}
+
+/* ---------- shorter windows: the guide repeats the masthead's one-liner, so drop the one-liner ---------- */
+@media (max-height: 860px) and (min-width: 721px) {
+  .masthead__lede {
+    display: none;
+  }
+}
+
+/* ---------- mid widths: the rail narrows with the window ---------- */
+@media (max-width: 1100px) {
+  .stage {
+    --rail: 17rem;
+  }
+
+  .tally {
+    width: 14rem;
+  }
+}
+
+/* ---------- phones: stack the UI, let the shelf scroll ---------- */
+@media (max-width: 720px) {
+  .stage {
+    grid-template-columns: minmax(0, 1fr);
+    height: calc(100svh - 40px); /* the story's first line peeks below, so phones see there is more */
+    grid-template-rows: auto minmax(0, 1fr) auto auto auto auto;
+    grid-template-areas:
+      'masthead'
+      'guide'
+      'status'
+      'shelf'
+      'controls'
+      'cue';
+    gap: 10px;
+  }
+
+  .tally,
+  .orbit-hint {
+    display: none; /* the numbers are in the story on small screens; touch has no mouse to drag */
+  }
+
+  .masthead {
+    padding: 12px 14px 14px;
+  }
+
+  .masthead__lede {
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  .controls .button {
+    flex: 1;
+  }
+
+  .card {
+    width: 80px;
+  }
+
+  .card__thumb {
+    width: 66px;
+    height: 66px;
+  }
+}
+
+/* ---------- short screens (a phone on its side): the scene needs the height ---------- */
+@media (max-height: 520px) {
+  .stage {
+    gap: 6px var(--gutter);
+  }
+
+  .masthead {
+    padding: 8px 12px;
+  }
+
+  .masthead__title {
+    font-size: 1.25rem;
+  }
+
+  .masthead__lede,
+  .masthead__en,
+  .tally,
+  .orbit-hint {
+    display: none;
+  }
+
+  .status {
+    padding: 5px 12px 5px 10px;
+    font-size: var(--text-small);
+  }
+
+  .shelf__list {
+    padding-top: 6px;
+    gap: 6px;
+  }
+
+  .card {
+    width: 64px;
+    padding: 4px 4px 5px;
+  }
+
+  .card__thumb {
+    width: 54px;
+    height: 54px;
+  }
+
+  .card__name {
+    font-size: 11px;
+  }
+
+  .card__note {
+    display: none;
+  }
+
+  .controls .button {
+    padding: 7px 12px;
+    font-size: var(--text-small);
+  }
+}
+
+@media (pointer: coarse) {
+  .guide__keys {
+    display: none; /* no keyboard on a touch screen */
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

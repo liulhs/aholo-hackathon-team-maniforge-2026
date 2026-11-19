@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>图生抓取 · Image2Grasp</title>
+    <meta name="description" content="从图生 3D 到图生抓取：将 Lux3D 根据照片生成的物体放置于桌面任意位置，仿真中的 SO-101 机械臂通过学习得到的策略自主完成抓取。" />
+    <meta name="theme-color" content="#e6ebef" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='7' y='3' width='18' height='26' rx='9' fill='%231468c8'/%3E%3Crect x='7' y='15' width='18' height='14' rx='4' fill='%231b2733'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <main>
+      <section class="stage" id="demo" aria-label="在线演示">
+        <div class="viewfinder" aria-hidden="true"></div>
+        <canvas id="scene" class="scene" tabindex="0" aria-label="仿真场景：固定于桌边的机械臂与深色垫子上的物体。拖动物体或点击垫子可调整位置；键盘操作：方向键移动物体，Enter 开始抓取，R 旋转。"></canvas>
+
+        <header class="masthead hud">
+          <h1 class="masthead__title">图生抓取 <span class="masthead__en" lang="en">Image2Grasp</span></h1>
+          <p class="masthead__lede">将物体拖放至深色垫子上的任意位置，松开后机械臂将自主完成抓取。</p>
+        </header>
+
+        <details class="guide hud" id="guide" open>
+          <summary class="guide__toggle">操作指南</summary>
+          <ol class="guide__steps">
+            <li class="guide__step guide__step--main">
+              <span class="guide__what">用鼠标拖动物体</span>
+              <span class="guide__how">按住桌上的物体，拖到深色垫子上任意位置后松开。</span>
+            </li>
+            <li class="guide__step guide__step--main">
+              <span class="guide__what">等待机械臂抓取</span>
+              <span class="guide__how">松开后机械臂自动抓取，无需其他操作；没抓到会自动重试。</span>
+            </li>
+            <li class="guide__step">
+              <span class="guide__what">换一个物体</span>
+              <span class="guide__how">点击下方任意一张卡片。</span>
+            </li>
+            <li class="guide__step">
+              <span class="guide__what">其他按钮（可选）</span>
+              <span class="guide__how">「旋转 45°」改朝向，「重新抓取」再抓一次。</span>
+            </li>
+            <li class="guide__step">
+              <span class="guide__what">转动视角（可选）</span>
+              <span class="guide__how">拖动物体以外的空白处，绕着桌子看。</span>
+            </li>
+          </ol>
+          <p class="guide__keys">键盘（可选）：先点一下画面，<kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd> 移动物体，<kbd>R</kbd> 旋转，<kbd>Enter</kbd> 开始抓取。</p>
+        </details>
+
+        <p class="orbit-hint hud">
+          <svg class="orbit-hint__icon" viewBox="0 0 48 48" aria-hidden="true">
+            <g transform="rotate(-18 24 24)">
+              <path class="orbit-hint__orbit orbit-hint__orbit--back" d="M3 24 A21 7 0 0 1 45 24" />
+            </g>
+            <circle class="orbit-hint__sphere" cx="24" cy="24" r="12" />
+            <ellipse class="orbit-hint__line" cx="24" cy="24" rx="12" ry="4" />
+            <ellipse class="orbit-hint__line" cx="24" cy="24" rx="4" ry="12" />
+            <g transform="rotate(-18 24 24)">
+              <path class="orbit-hint__orbit" d="M45 24 A21 7 0 0 1 3 24" />
+              <path class="orbit-hint__orbit" d="M0.5 28 L3 24 L7.5 25.5" />
+            </g>
+          </svg>
+          <span class="orbit-hint__text">在任意区域拖动鼠标以改变视角，自由查看场景</span>
+        </p>
+
+        <aside class="tally hud" aria-labelledby="tally-heading">
+          <h2 id="tally-heading" class="visually-hidden">抓取成功率</h2>
+          <p class="tally__number" id="tally-rate">–</p>
+          <p class="tally__caption" id="tally-label">仿真抓取成功率</p>
+          <dl class="tally__rows">
+            <div class="tally__row" id="tally-overall-row" hidden><dt>随机摆放测试</dt><dd id="tally-overall"></dd></div>
+            <div class="tally__row" id="tally-object-row" hidden><dt id="tally-object-name"></dt><dd id="tally-object"></dd></div>
+            <div class="tally__row" id="tally-session-row" hidden><dt>本次演示</dt><dd id="tally-session"></dd></div>
+          </dl>
+        </aside>
+
+        <p class="status" id="status" role="status" aria-live="polite" data-phase="loading">
+          <span class="status__dot" aria-hidden="true"></span>
+          <span class="status__text" id="status-text">载入中</span>
+        </p>
+
+        <nav class="shelf" aria-label="选择物体">
+          <ul class="shelf__list" id="shelf"></ul>
+        </nav>
+
+        <div class="controls">
+          <button type="button" class="button" id="rotate">旋转 45°</button>
+          <button type="button" class="button" id="retry">重新抓取</button>
+          <button type="button" class="button" id="backdrop" aria-pressed="false">餐厅背景</button>
+        </div>
+
+        <a class="scroll-cue" href="#story">项目说明</a>
+
+        <div class="loader" id="loader">
+          <p class="loader__text" id="loader-text">正在载入物理引擎与模型</p>
+          <div class="loader__bar" role="progressbar" aria-label="载入进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="loader-bar">
+            <span class="loader__fill" id="loader-fill"></span>
+          </div>
+        </div>
+      </section>
+
+      <article class="story" id="story" aria-labelledby="story-heading">
+        <header class="story__intro">
+          <h2 id="story-heading" class="story__title">从商品图片到自主抓取的机械臂</h2>
+          <p class="story__lede">
+            本项目使用 Lux3D 将 8 个真实物品生成为可用于物理仿真的 3D 模型，以一台真实 SO-101 机械臂作为遥操作主臂，在仿真中采集了
+            <strong class="num">340</strong> 次抓取示范，并训练出一个仅以状态数值为输入、不依赖图像的抓取模型。上方演示即该模型在浏览器中的实时运行。
+          </p>
+        </header>
+
+        <ol class="steps">
+          <li class="step step--wide">
+            <section class="carousel lux3d" id="lux3d" aria-roledescription="轮播" aria-labelledby="lux3d-heading">
+              <div class="lux3d__intro">
+                <h3 class="step__title" id="lux3d-heading">使用 Lux3D 生成物体</h3>
+                <p>每个物体以 1 至 8 张不同角度的图片作为 Lux3D 图生 3D 的输入；仅有一张正面图时，先使用 Lux3D 的「AI 多视图补全」生成四个视角。单个模型生成耗时约 6 分钟。</p>
+                <p>第一版每个物体仅输入一张图片：AirPods 表面噪点明显，厚度约为实物的两倍。改用多视角输入后，表面质量明显改善，Labubu 与星星人的背面细节也得以补全。8 个物体中拓麻歌子的生成质量最差，其挂链被生成为若干离散碎块。</p>
+                <div class="carousel__controls">
+                  <button type="button" class="carousel__arrow carousel__prev" aria-label="上一个物体" aria-controls="lux3d-track"></button>
+                  <ol class="carousel__dots" aria-label="选择物体"></ol>
+                  <button type="button" class="carousel__arrow carousel__next" aria-label="下一个物体" aria-controls="lux3d-track"></button>
+                  <button type="button" class="carousel__play" aria-pressed="false">暂停</button>
+                </div>
+              </div>
+              <ol class="carousel__track" id="lux3d-track" aria-live="off" tabindex="0" aria-label="8 个物体的参考图与生成结果，可左右滑动"></ol>
+            </section>
+          </li>
+
+          <li class="step">
+            <div class="step__text">
+              <h3 class="step__title">导入物理仿真</h3>
+              <p>模型缩放至夹爪可抓取的尺寸（Labubu 实物高 18 厘米，仿真中约 10 厘米），生成碰撞体并将底面压平以保证直立稳定，设定 30 至 60 克的质量及摩擦参数后导入 MuJoCo。桌边固定一台 SO-101，采用 MuJoCo Menagerie 官方模型。</p>
+              <p>演示中桌子周围的餐厅取自群核 SpatialVerse 公开的 InteriorGS 室内场景，以 3D 高斯泼溅表示，在网页中与 MuJoCo 画面合成渲染；该场景仅作背景，不参与物理计算。</p>
+              <p>物体仅保证静置时可直立，受夹爪碰撞后会倾倒，与真实情况一致。网页使用同一份编译后的场景，仅精简了显示网格与贴图；物理参数逐项一致，采集的示范可在网页场景中逐位复现。</p>
+            </div>
+            <section class="carousel step__media scene-carousel" id="scene-carousel" aria-roledescription="轮播" aria-label="抓取场景中的 8 个物体">
+              <ol class="carousel__track" id="scene-track" aria-live="off" tabindex="0" aria-label="抓取场景中的 8 个物体，可左右滑动"></ol>
+              <div class="carousel__controls">
+                <button type="button" class="carousel__arrow carousel__prev" aria-label="上一个物体" aria-controls="scene-track"></button>
+                <ol class="carousel__dots" aria-label="选择物体"></ol>
+                <button type="button" class="carousel__arrow carousel__next" aria-label="下一个物体" aria-controls="scene-track"></button>
+                <button type="button" class="carousel__play" aria-pressed="false">暂停</button>
+              </div>
+            </section>
+          </li>
+
+          <li class="step">
+            <div class="step__text">
+              <h3 class="step__title">以真实机械臂遥操作仿真机械臂</h3>
+              <p>操作者手动带动一台真实的 SO-101 机械臂，仿真中的 SO-101 实时跟随其关节角度。操作者看着屏幕完成抓取，被抓的物体只存在于仿真中。</p>
+            </div>
+            <figure class="step__media player">
+              <video controls muted loop playsinline preload="metadata" poster="./media/teleop-side-by-side-poster.jpg" width="1600" height="900"
+                aria-label="左为手动带动的真实机械臂，右为同步运动的仿真机械臂">
+                <source src="./media/teleop-side-by-side.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </li>
+
+          <li class="step">
+            <div class="step__text">
+              <h3 class="step__title">采集 340 次抓取示范</h3>
+              <p>每个物体在随机位置采集 40 次（外卖盒 60 次），共 340 次、36,497 帧。物体抬起 5 厘米并保持 1 秒记为成功，失败的回合不保存。</p>
+              <p>每帧保存完整的物理状态，任何一次示范都可以原样回放。</p>
+            </div>
+            <figure class="step__media player player--portrait">
+              <video controls muted loop playsinline preload="metadata" poster="./media/teleop-real-4x-poster.jpg" width="540" height="960"
+                aria-label="手机实拍的示范采集过程，4 倍速">
+                <source src="./media/teleop-real-4x.mp4" type="video/mp4" />
+              </video>
+            </figure>
+          </li>
+
+          <li class="step">
+            <div class="step__text">
+              <h3 class="step__title">训练不依赖图像的抓取模型</h3>
+              <p>模型采用 ACT（LeRobot 0.7.0 实现），共 740 万参数。每帧输入 18 个数值：机械臂 6 个关节角，以及物体位置、朝向与尺寸共 12 个数值。模型每次输出未来 2 秒内 40 步的关节目标，相邻多次预测经加权平均后执行。</p>
+              <p>8 个物体共用同一模型，在一台 Mac 上训练 40,000 步，耗时约 30 分钟。每项改动后均在仿真中随机摆放重新测试：</p>
+            </div>
+            <figure class="step__media chart" aria-labelledby="chart-caption">
+              <ol class="bars">
+                <li class="bar" style="--value: 38"><span class="bar__label">每物体 20 次示范</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">38%</span></li>
+                <li class="bar" style="--value: 65"><span class="bar__label">每物体 40 次示范</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">65%</span></li>
+                <li class="bar" style="--value: 72"><span class="bar__label">物体状态归一化</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">72%</span></li>
+                <li class="bar" style="--value: 74"><span class="bar__label">逐帧预测加权平均</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">74%</span></li>
+                <li class="bar bar--break" style="--value: 81"><span class="bar__label">扩展至 8 个物体</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">81%</span></li>
+                <li class="bar bar--now" style="--value: 85"><span class="bar__label">位置改用物体重心</span><span class="bar__track"><span class="bar__fill"></span></span><span class="bar__value">85%</span></li>
+              </ol>
+              <figcaption id="chart-caption">每行为完成该项改动后，在仿真中随机摆放测得的抓取成功率。前四行为 5 个物体（第一行 250 次，其余各 500 次），后两行为 8 个物体，各 400 次。</figcaption>
+            </figure>
+          </li>
+
+          <li class="step">
+            <div class="step__text">
+              <h3 class="step__title">在浏览器中闭环抓取</h3>
+              <p>物理仿真采用 MuJoCo 官方 WebAssembly 版本，模型导出为 ONNX 格式，由 onnxruntime-web 在 CPU 上运行。以每秒 20 帧运行，每帧执行一次预测与 10 步物理计算，单帧耗时约 2 毫秒，无需服务器算力。</p>
+              <p>若单轮 12 秒内未完成抓取，或物体倾倒持续 6 秒，机械臂将复位至初始姿态，并从物体当前位置重新抓取，最多重试 3 次。</p>
+              <p id="story-result" class="step__result"></p>
+            </div>
+            <figure class="step__media">
+              <table class="results">
+                <caption>采用本页设置随机摆放 800 次的抓取成功率</caption>
+                <thead>
+                  <tr><th scope="col">输入模型的物体位置</th><th scope="col">无重试</th><th scope="col">含重试</th></tr>
+                </thead>
+                <tbody>
+                  <tr><th scope="row">物体底面中心</th><td>77%</td><td>82%</td></tr>
+                  <tr class="results__now"><th scope="row">物体重心（当前采用）</th><td>84%</td><td>90%</td></tr>
+                </tbody>
+              </table>
+            </figure>
+          </li>
+        </ol>
+
+        <section class="honest" aria-labelledby="honest-heading">
+          <h3 id="honest-heading" class="honest__title">局限性说明</h3>
+          <ul class="honest__list">
+            <li>抓取全部在仿真中完成。真实机械臂仅用作采集示范的遥操作主臂，该模型尚未在真实机械臂上部署验证。</li>
+            <li>失败案例几乎均由物体先被碰倒导致。示范数据中物体均为直立状态，模型对倾倒物体的样本覆盖不足。</li>
+            <li>仿真物体尺寸小于实物：Labubu 实物高 18 厘米，仿真中约 10 厘米，以适配 SO-101 夹爪的开合范围。</li>
+            <li>成功率由本页同一套代码在 Node 环境中批量测得；在 Chrome 中抽检 200 次，成功 178 次，Node 中相同摆放成功 184 次。</li>
+          </ul>
+        </section>
+
+        <section class="credits" aria-labelledby="credits-heading">
+          <h3 id="credits-heading" class="credits__title">参考资料</h3>
+          <div class="credits__groups">
+            <section class="credits__group">
+              <h4 class="credits__group-title">赛事</h4>
+              <ul class="credits__list">
+                <li><span class="credits__name"><a href="https://www.aholo3d.cn/hackathon" target="_blank" rel="noopener noreferrer">Aholo 全球 3D AI 黑客松 2026</a></span><span class="credits__desc">赛事官网：规则、赛程、评审与 FAQ</span></li>
+                <li><span class="credits__name"><a href="https://www.aholo3d.cn/agreement/termsofuse" target="_blank" rel="noopener noreferrer">Aholo 服务条款</a></span><span class="credits__desc">Aholo 平台服务的使用条款</span></li>
+                <li><span class="credits__name"><a href="https://www.modelscope.cn/studios/liulhs/image2grasp" target="_blank" rel="noopener noreferrer">图生抓取 · 魔搭创空间</a></span><span class="credits__desc">本作品在魔搭社区发布的在线演示</span></li>
+              </ul>
+            </section>
+            <section class="credits__group">
+              <h4 class="credits__group-title">3D 生成</h4>
+              <ul class="credits__list">
+                <li><span class="credits__name"><a href="https://lux3d.aholo3d.cn/" target="_blank" rel="noopener noreferrer">Aholo Lux3D</a></span><span class="credits__desc">8 个物体的 3D 模型：图生 3D 与 AI 多视图补全</span></li>
+                <li><span class="credits__name"><a href="https://3d.aholo.cn/studio" target="_blank" rel="noopener noreferrer">Aholo3D 工作台</a></span><span class="credits__desc">生成所用的网页工作台</span></li>
+                <li><span class="credits__name"><a href="https://lux3d.aholo3d.cn/docs" target="_blank" rel="noopener noreferrer">Lux3D 开发文档</a></span><span class="credits__desc">输入规格与生成参数</span></li>
+              </ul>
+            </section>
+            <section class="credits__group">
+              <h4 class="credits__group-title">场景与机器人</h4>
+              <ul class="credits__list">
+                <li><span class="credits__name"><a href="https://huggingface.co/datasets/spatialverse/SAGE-3D_InteriorGS_usdz" target="_blank" rel="noopener noreferrer">SAGE-3D / InteriorGS</a></span><span class="credits__desc">群核 SpatialVerse 公开的室内 3D 高斯场景，演示中的餐厅背景取自场景 839920：截取桌子周围 6 米，仅保留基础颜色，只用于显示，不参与物理计算 · CC BY-NC 4.0 · <a href="https://github.com/Galery23/SAGE-3D_Official" target="_blank" rel="noopener noreferrer">官方仓库</a></span></li>
+                <li><span class="credits__name"><a href="https://github.com/google-deepmind/mujoco_menagerie/tree/main/robotstudio_so101" target="_blank" rel="noopener noreferrer">MuJoCo Menagerie SO-101</a></span><span class="credits__desc">仿真中的机械臂模型 · Apache-2.0</span></li>
+                <li><span class="credits__name"><a href="https://github.com/TheRobotStudio/SO-ARM100" target="_blank" rel="noopener noreferrer">TheRobotStudio SO-ARM100</a></span><span class="credits__desc">SO-101 机械臂的开源设计，真实主臂与仿真模型均源自于此 · Apache-2.0</span></li>
+              </ul>
+            </section>
+            <section class="credits__group">
+              <h4 class="credits__group-title">仿真、训练与网页</h4>
+              <ul class="credits__list">
+                <li><span class="credits__name"><a href="https://mujoco.org" target="_blank" rel="noopener noreferrer">MuJoCo 4.0.1</a></span><span class="credits__desc">物理仿真，网页端采用官方 WebAssembly 版本 · Apache-2.0</span></li>
+                <li><span class="credits__name"><a href="https://github.com/huggingface/lerobot" target="_blank" rel="noopener noreferrer">LeRobot 0.7.0</a></span><span class="credits__desc">ACT 模型的实现与训练 · Apache-2.0</span></li>
+                <li><span class="credits__name"><a href="https://arxiv.org/abs/2304.13705" target="_blank" rel="noopener noreferrer">ACT 论文</a></span><span class="credits__desc">Zhao 等，Learning Fine-Grained Bimanual Manipulation with Low-Cost Hardware，RSS 2023</span></li>
+                <li><span class="credits__name"><a href="https://onnxruntime.ai" target="_blank" rel="noopener noreferrer">ONNX Runtime Web 1.31.1</a></span><span class="credits__desc">浏览器端模型推理 · MIT</span></li>
+                <li><span class="credits__name"><a href="https://threejs.org" target="_blank" rel="noopener noreferrer">three.js 0.187</a></span><span class="credits__desc">3D 渲染 · MIT</span></li>
+                <li><span class="credits__name"><a href="https://sparkjs.dev" target="_blank" rel="noopener noreferrer">Spark 2.4</a></span><span class="credits__desc">网页端高斯泼溅渲染 · MIT</span></li>
+                <li><span class="credits__name"><a href="https://fonts.google.com/specimen/Bricolage+Grotesque" target="_blank" rel="noopener noreferrer">Bricolage Grotesque</a></span><span class="credits__desc">数字字体 · SIL Open Font License</span></li>
+              </ul>
+            </section>
+            <section class="credits__group credits__group--wide">
+              <h4 class="credits__group-title">Lux3D 输入图片</h4>
+              <ul class="credits__list">
+                <li><span class="credits__name"><a href="https://www.popmart.com/us/products/8990/labubu-original-ver.3-figure" target="_blank" rel="noopener noreferrer">Labubu</a></span><span class="credits__desc">泡泡玛特官网商品图</span></li>
+                <li><span class="credits__name"><a href="https://www.popmart.com/us/products/3620/twinkle-twinkle-little-devil-star-figure" target="_blank" rel="noopener noreferrer">星星人</a></span><span class="credits__desc">泡泡玛特官网商品图</span></li>
+                <li><span class="credits__name"><a href="https://www.apple.com/airpods-pro/" target="_blank" rel="noopener noreferrer">AirPods Pro 3</a></span><span class="credits__desc">Apple 官网商品图</span></li>
+                <li><span class="credits__name"><a href="https://www.insta360.com/product/insta360-x5" target="_blank" rel="noopener noreferrer">Insta360 X5</a></span><span class="credits__desc">Insta360 官网商品页的 360° 旋转图</span></li>
+                <li><span class="credits__name"><a href="https://www.insta360.com/product/insta360-go3s" target="_blank" rel="noopener noreferrer">Insta360 GO 3S</a></span><span class="credits__desc">Insta360 官网商品图</span></li>
+                <li><span class="credits__name"><a href="https://commons.wikimedia.org/wiki/File:Tamagotchi_0124_ubt.jpeg" target="_blank" rel="noopener noreferrer">拓麻歌子</a></span><span class="credits__desc">Wikimedia Commons「Tamagotchi 0124 ubt.jpeg」 · CC BY-SA 3.0</span></li>
+                <li><span class="credits__name"><a href="https://commons.wikimedia.org/wiki/File:Sweet_Sour-Boxes-Large.jpg" target="_blank" rel="noopener noreferrer">外卖盒</a></span><span class="credits__desc">Wikimedia Commons「Sweet Sour-Boxes-Large.jpg」 · CC0</span></li>
+                <li><span class="credits__name"><a href="https://3d.aholo.cn/studio" target="_blank" rel="noopener noreferrer">Aholo 吉祥物</a></span><span class="credits__desc">Aholo3D 工作台页面</span></li>
+              </ul>
+              <p class="credits__note">商品图版权归各公司所有，仅用作 Lux3D 输入并在本页展示，无商业用途。</p>
+            </section>
+          </div>
+        </section>
+
+        <footer class="story__footer">
+          <p>Team ManiForge · Aholo 全球 3D AI 黑客松 2026</p>
+          <a class="button button--quiet" href="#demo">返回演示</a>
+        </footer>
+      </article>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

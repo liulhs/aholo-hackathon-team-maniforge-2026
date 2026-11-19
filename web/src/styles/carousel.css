@@ -1,0 +1,148 @@
+/* The story's carousels (src/story/carousel.ts): a scroll-snap row of full-width slides, arrows,
+   dots whose fill times the autoplay, and a pause button. Each step styles its own slides. */
+
+.carousel {
+  --carousel-interval: 6s;
+}
+
+.carousel__controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 20px;
+}
+
+.carousel__dots {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.carousel__dot {
+  position: relative;
+  display: block;
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--color-card-edge);
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    width var(--duration-normal) var(--ease-out),
+    background-color var(--duration-fast) linear;
+}
+
+.carousel__dot:hover {
+  background: color-mix(in srgb, var(--color-accent) 35%, var(--color-card-edge));
+}
+
+.carousel__dot[aria-current='true'] {
+  width: 30px;
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-card-edge));
+}
+
+/* the active dot fills over one interval; its animationend moves the carousel on */
+.carousel__dot-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+
+.carousel__dot[aria-current='true'] .carousel__dot-fill {
+  animation: carousel-fill var(--carousel-interval) linear forwards;
+}
+
+.carousel[data-playing='false'] .carousel__dot-fill {
+  animation-play-state: paused;
+}
+
+@keyframes carousel-fill {
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.carousel__arrow,
+.carousel__play {
+  appearance: none;
+  border: 1px solid var(--color-card-edge);
+  background: var(--color-card);
+  color: var(--color-ink);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) linear;
+}
+
+.carousel__arrow {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.carousel__arrow::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translate(-30%, -50%) rotate(45deg);
+}
+
+.carousel__next::before {
+  transform: translate(-70%, -50%) rotate(-135deg);
+}
+
+.carousel__play {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 2px;
+  font-size: var(--text-small);
+  font-weight: 600;
+}
+
+.carousel__arrow:hover,
+.carousel__play:hover {
+  border-color: var(--color-accent);
+}
+
+.carousel__arrow:focus-visible,
+.carousel__play:focus-visible,
+.carousel__dot:focus-visible,
+.carousel__track:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* ---------- right: the slides ---------- */
+.carousel__track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 40px; /* slides never touch while one slides in */
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.carousel__track::-webkit-scrollbar {
+  display: none;
+}
+
+.carousel__slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+}

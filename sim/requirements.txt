@@ -1,0 +1,12 @@
+# Python environment for the MuJoCo teleop work (repo-root .venv). See sim/README.md.
+# .venv has no pip of its own (a bare `pip` installs into anaconda): uv pip install --python .venv/bin/python -r sim/requirements.txt
+mujoco==4.0.1
+lerobot[feetech,dataset,training]==0.7.0
+trimesh
+fast_simplification
+scipy
+# Web demo export and asset build (sim/export_policy.py, sim/build_web_assets.py)
+onnx==1.23.2
+onnxruntime==1.32.0
+pymeshlab==2025.7.post1
+msgpack==1.2.4  # sim/sage3d_background.py reads SAGE-3D .nurec files

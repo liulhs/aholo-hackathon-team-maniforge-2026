@@ -1,0 +1,186 @@
+{
+ "source_checkpoint": "outputs/act_state_all8_com/checkpoints/040000/pretrained_model",
+ "training_dataset": "data/so101_state_all8_com",
+ "objects": [
+  "takeout_box",
+  "labubu",
+  "twinkle_devil",
+  "airpods",
+  "aholo_mascot",
+  "tamagotchi",
+  "insta360_x5",
+  "insta360_go3s"
+ ],
+ "object_position": "com",
+ "fps": 20,
+ "chunk_size": 40,
+ "joint_names": [
+  "shoulder_pan",
+  "shoulder_lift",
+  "elbow_flex",
+  "wrist_flex",
+  "wrist_roll",
+  "gripper"
+ ],
+ "inputs": {
+  "state": {
+   "dtype": "float32",
+   "shape": [
+    1,
+    6
+   ],
+   "meaning": "joint angles in rad, order joint_names (sim qpos)"
+  },
+  "env_state": {
+   "dtype": "float32",
+   "shape": [
+    1,
+    12
+   ],
+   "meaning": "lift_scene.object_state: object position xyz (m, world), rotation-matrix column 0 (3), column 1 (3), bounding-box size xyz (m)"
+  }
+ },
+ "outputs": {
+  "actions": {
+   "dtype": "float32",
+   "shape": [
+    1,
+    40,
+    6
+   ],
+   "meaning": "target joint angles in rad for this frame and the next chunk_size-1 frames, order joint_names"
+  }
+ },
+ "normalization": "baked into the graph (LeRobot MEAN_STD stats of the training dataset); feed raw values",
+ "control_loop": "As sim/evaluate.py: every frame read the 6 joint qpos and object_state, run the model, temporal-ensemble the chunk, write each joint's action, clipped to actuator_ctrlrange, to that joint's position-actuator ctrl (teleop.SimArm.command), then mj_step round(1 / fps / opt.timestep) times.",
+ "opset": 17,
+ "temporal_ensemble_coeff": 0.01,
+ "temporal_ensemble": {
+  "steps": [
+   "Precompute w[i] = exp(-coeff * i) and W[i] = w[0] + ... + w[i] for i = 0 .. chunk_size-1 (C = chunk_size).",
+   "Keep two buffers, empty at the start of every episode (reset): avg, a list of 6-number actions, and count, a list of integers of the same length.",
+   "Every frame (20 Hz) run the model on the current observation; it returns a chunk a[0..C-1] for this frame and the next C-1 frames.",
+   "If avg is empty: avg = copy of a[0..C-1], count = [1] * C.",
+   "Otherwise avg and count have length C-1. For k = 0 .. C-2: n = count[k]; avg[k] = (avg[k] * W[n-1] + a[k] * w[n]) / W[n]; count[k] = min(n + 1, C). Then append a[C-1] to avg and 1 to count (length C again).",
+   "Pop the front: the action to send this frame is avg[0]; set avg = avg[1..], count = count[1..]."
+  ],
+  "result": "The action sent at frame t is the weighted mean of every prediction made for frame t: sum_j w[j] * p_j / sum_j w[j], where p_0 is the oldest such prediction (made C-1 frames ago, or the first frame's chunk), p_1 the next oldest, and so on; with coeff 0.01 older predictions weigh slightly more. n never exceeds C-1 when it indexes w, so the min() never bites. LeRobot does this in float32 (ACTTemporalEnsembler in lerobot/policies/act/modeling_act.py)."
+ },
+ "evaluations": [
+  {
+   "policy": "outputs/act_state_all8_com/checkpoints/040000/pretrained_model",
+   "seed": 0,
+   "starts": "data/so101_state_all8",
+   "n_action_steps": 1,
+   "temporal_ensemble": 0.01,
+   "file": "outputs/eval/all8_com/te_<object>.json",
+   "lifted": 339,
+   "trials": 400,
+   "per_object": {
+    "aholo_mascot": "43/50",
+    "airpods": "38/50",
+    "insta360_go3s": "46/50",
+    "insta360_x5": "42/50",
+    "labubu": "45/50",
+    "takeout_box": "44/50",
+    "tamagotchi": "42/50",
+    "twinkle_devil": "39/50"
+   }
+  },
+  {
+   "policy": "policy.onnx (onnxruntime-web 1.31.1, MuJoCo WebAssembly 4.0.1, the page's own modules, run in Node by web/tools/eval_browser.ts)",
+   "setup": "page",
+   "description": "arm at manifest start_pose_rad; object at a uniformly random spot and yaw on the mat, placed by src/demo/placement.ts; judged by src/demo/attempt.ts (10 settle frames, lift 5 cm held 1 s off the table); retries (attempt.ts PAGE_RETRY_RULES: up to 3, 12 s rounds, a round also ends once the object has lain knocked over 6 s; the arm returns to its start pose and the policy restarts)",
+   "seed": 20261119,
+   "file": "outputs/eval/web/all8/com_<object>.json",
+   "lifted": 721,
+   "trials": 800,
+   "per_object": {
+    "aholo_mascot": "95/100",
+    "airpods": "83/100",
+    "insta360_go3s": "93/100",
+    "insta360_x5": "86/100",
+    "labubu": "91/100",
+    "takeout_box": "96/100",
+    "tamagotchi": "85/100",
+    "twinkle_devil": "92/100"
+   }
+  },
+  {
+   "policy": "policy.onnx (onnxruntime-web 1.31.1, MuJoCo WebAssembly 4.0.1, the page's own modules, run in Node by web/tools/eval_browser.ts)",
+   "setup": "page-no-retry",
+   "description": "arm at manifest start_pose_rad; object at a uniformly random spot and yaw on the mat, placed by src/demo/placement.ts; judged by src/demo/attempt.ts (10 settle frames, lift 5 cm held 1 s off the table); one 20 s round, no retries",
+   "seed": 20261119,
+   "file": "outputs/eval/web/all8/comnoretry_<object>.json",
+   "lifted": 671,
+   "trials": 800,
+   "per_object": {
+    "aholo_mascot": "90/100",
+    "airpods": "73/100",
+    "insta360_go3s": "84/100",
+    "insta360_x5": "81/100",
+    "labubu": "89/100",
+    "takeout_box": "94/100",
+    "tamagotchi": "78/100",
+    "twinkle_devil": "82/100"
+   }
+  },
+  {
+   "policy": "policy.onnx of the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup) (onnxruntime-web 1.31.1, MuJoCo WebAssembly 4.0.1, the page's own modules, run in Node by web/tools/eval_browser.ts)",
+   "setup": "compare-origin-retry-lying-adapter",
+   "description": "arm at manifest start_pose_rad; object at a uniformly random spot and yaw on the mat, placed by src/demo/placement.ts; judged by src/demo/attempt.ts (10 settle frames, lift 5 cm held 1 s off the table); retries (attempt.ts PAGE_RETRY_RULES: up to 3, 12 s rounds, a round also ends once the object has lain knocked over 6 s; the arm returns to its start pose and the policy restarts); lying adapter; the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup)",
+   "seed": 20261119,
+   "file": "outputs/eval/web/all8/lying_<object>.json",
+   "lifted": 710,
+   "trials": 800,
+   "per_object": {
+    "aholo_mascot": "90/100",
+    "airpods": "90/100",
+    "insta360_go3s": "92/100",
+    "insta360_x5": "86/100",
+    "labubu": "88/100",
+    "takeout_box": "95/100",
+    "tamagotchi": "88/100",
+    "twinkle_devil": "81/100"
+   }
+  },
+  {
+   "policy": "policy.onnx of the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup) (onnxruntime-web 1.31.1, MuJoCo WebAssembly 4.0.1, the page's own modules, run in Node by web/tools/eval_browser.ts)",
+   "setup": "compare-origin-retry",
+   "description": "arm at manifest start_pose_rad; object at a uniformly random spot and yaw on the mat, placed by src/demo/placement.ts; judged by src/demo/attempt.ts (10 settle frames, lift 5 cm held 1 s off the table); retries (attempt.ts PAGE_RETRY_RULES: up to 3, 12 s rounds, a round also ends once the object has lain knocked over 6 s; the arm returns to its start pose and the policy restarts); the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup)",
+   "seed": 20261119,
+   "file": "outputs/eval/web/all8/page_<object>.json",
+   "lifted": 655,
+   "trials": 800,
+   "per_object": {
+    "aholo_mascot": "84/100",
+    "airpods": "80/100",
+    "insta360_go3s": "81/100",
+    "insta360_x5": "80/100",
+    "labubu": "83/100",
+    "takeout_box": "90/100",
+    "tamagotchi": "77/100",
+    "twinkle_devil": "80/100"
+   }
+  },
+  {
+   "policy": "policy.onnx of the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup) (onnxruntime-web 1.31.1, MuJoCo WebAssembly 4.0.1, the page's own modules, run in Node by web/tools/eval_browser.ts)",
+   "setup": "compare-origin-no-retry",
+   "description": "arm at manifest start_pose_rad; object at a uniformly random spot and yaw on the mat, placed by src/demo/placement.ts; judged by src/demo/attempt.ts (10 settle frames, lift 5 cm held 1 s off the table); no retries; the bottom-centre-point model outputs/act_state_all8 (backup: outputs/eval/web/policy_all8_origin_backup)",
+   "seed": 20261119,
+   "file": "outputs/eval/web/all8/noretry_<object>.json",
+   "lifted": 614,
+   "trials": 800,
+   "per_object": {
+    "aholo_mascot": "75/100",
+    "airpods": "75/100",
+    "insta360_go3s": "78/100",
+    "insta360_x5": "77/100",
+    "labubu": "79/100",
+    "takeout_box": "85/100",
+    "tamagotchi": "69/100",
+    "twinkle_devil": "76/100"
+   }
+  }
+ ]
+}

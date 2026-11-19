@@ -1,0 +1,200 @@
+/* The story's video player (src/story/videoPlayer.ts): a large play button over the frame while
+   paused, and a control bar along the bottom edge (play/pause, progress, time). */
+
+.player {
+  margin: 0;
+}
+
+.player__frame {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--color-card-edge);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lift);
+  background: #0e1419;
+}
+
+.player__frame video {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: pointer;
+}
+
+/* ---------- the large play button: shown until the video plays, and again when paused ---------- */
+.player__big {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 68px;
+  height: 68px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(250, 251, 252, 0.92);
+  box-shadow: 0 10px 30px -10px rgba(14, 22, 30, 0.6);
+  transform: translate(-50%, -50%);
+  cursor: pointer;
+  transition:
+    opacity var(--duration-normal) linear,
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.player__big::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 54%;
+  border-style: solid;
+  border-width: 11px 0 11px 18px;
+  border-color: transparent transparent transparent var(--color-accent);
+  transform: translate(-50%, -50%);
+}
+
+.player__big:hover {
+  transform: translate(-50%, -50%) scale(1.06);
+}
+
+.player[data-state='playing'] .player__big {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- the bar ---------- */
+.player__bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 26px 14px 12px;
+  background: linear-gradient(transparent, rgba(14, 22, 30, 0.72));
+  color: #fff;
+  transition: opacity var(--duration-normal) linear;
+}
+
+/* while playing, the bar steps back until the visitor reaches for it */
+.player[data-state='playing'] .player__bar {
+  opacity: 0;
+}
+
+.player[data-state='playing'] .player__frame:hover .player__bar,
+.player[data-state='playing'] .player__bar:focus-within {
+  opacity: 1;
+}
+
+.player__toggle {
+  position: relative;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+/* play: a triangle; pause: two bars */
+.player__toggle::before,
+.player__toggle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.player__toggle::before {
+  left: 11px;
+  border-style: solid;
+  border-width: 7px 0 7px 12px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.player[data-state='playing'] .player__toggle::before,
+.player[data-state='playing'] .player__toggle::after {
+  width: 4px;
+  height: 14px;
+  border: 0;
+  border-radius: 1px;
+  background: #fff;
+}
+
+.player[data-state='playing'] .player__toggle::before {
+  left: 10px;
+}
+
+.player[data-state='playing'] .player__toggle::after {
+  left: 18px;
+}
+
+.player__time {
+  flex: none;
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- progress: a thin track filled in the accent, a dot to drag ---------- */
+.player__seek {
+  --progress: 0;
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.player__seek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-accent) calc(var(--progress) * 100%), rgba(255, 255, 255, 0.35) 0);
+}
+
+.player__seek::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--color-accent) calc(var(--progress) * 100%), rgba(255, 255, 255, 0.35) 0);
+}
+
+.player__seek::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.player__seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.player__big:focus-visible,
+.player__toggle:focus-visible,
+.player__seek:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.player figcaption {
+  margin-top: 10px;
+  font-size: var(--text-small);
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+}
+
+/* a portrait phone clip: narrower than the column, so it does not run a screen tall */
+.player--portrait {
+  max-width: 340px;
+}

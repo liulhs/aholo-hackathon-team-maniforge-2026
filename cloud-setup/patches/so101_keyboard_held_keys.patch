@@ -1,0 +1,50 @@
+diff --git a/source/leisaac/leisaac/devices/keyboard/so101_keyboard.py b/source/leisaac/leisaac/devices/keyboard/so101_keyboard.py
+index 1ecc934..c3dd40c 100644
+--- a/source/leisaac/leisaac/devices/keyboard/so101_keyboard.py
++++ b/source/leisaac/leisaac/devices/keyboard/so101_keyboard.py
+@@ -34,6 +34,9 @@ class SO101Keyboard(Device):
+ 
+         # command buffers (dx, dy, dz, droll, dpitch, dyaw, d_shoulder_pan, d_gripper)
+         self._delta_action = np.zeros(8)
++        # Keys currently held. The delta is rebuilt from this set, so a duplicated KEY_PRESS or a lost
++        # KEY_RELEASE (seen over the WebRTC streaming client) cannot leave a motion stuck on.
++        self._held_keys: set[str] = set()
+ 
+         # initialize the target frame
+         self.asset_name = "robot"
+@@ -61,18 +64,27 @@ class SO101Keyboard(Device):
+         return self._convert_delta_from_frame(self._delta_action)
+ 
+     def reset(self):
+-        self._delta_action[:] = 0.0
++        self._held_keys.clear()
++        self._delta_action = np.zeros(8)
++
++    def _rebuild_delta(self):
++        delta = np.zeros(8)
++        for key in self._held_keys:
++            delta = delta + self._ACTION_DELTA_MAPPING[self._INPUT_KEY_MAPPING[key]]
++        self._delta_action = delta
+ 
+     def _on_keyboard_event(self, event, *args, **kwargs):
+         super()._on_keyboard_event(event, *args, **kwargs)
+-        # apply the command when pressed
++        name = event.input.name
+         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
+-            if event.input.name in self._INPUT_KEY_MAPPING.keys():
+-                self._delta_action += self._ACTION_DELTA_MAPPING[self._INPUT_KEY_MAPPING[event.input.name]]
+-        # remove the command when un-pressed
+-        if event.type == carb.input.KeyboardEventType.KEY_RELEASE:
+-            if event.input.name in self._INPUT_KEY_MAPPING.keys():
+-                self._delta_action -= self._ACTION_DELTA_MAPPING[self._INPUT_KEY_MAPPING[event.input.name]]
++            if name in ("B", "R"):
++                # start / reset: drop any key state left over from before
++                self._held_keys.clear()
++            elif name in self._INPUT_KEY_MAPPING:
++                self._held_keys.add(name)
++        elif event.type == carb.input.KeyboardEventType.KEY_RELEASE:
++            self._held_keys.discard(name)
++        self._rebuild_delta()
+ 
+     def _create_key_bindings(self):
+         """Creates default key binding.

@@ -1,0 +1,192 @@
+/* The Lux3D carousel (story step 1), borderless like the other steps: the step's text and the
+   controls on the left, one object per slide on the right: its Lux3D inputs, then the model it
+   produced. Built by src/story/lux3dCarousel.ts. */
+
+.lux3d {
+  --lux3d-plate: #eff3f6; /* the renders' background, sim/build_lux3d_gallery.py BACKGROUND */
+  grid-column: 2 / -1;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: clamp(16px, 3vw, 48px); /* the same columns and gap as the other steps */
+  align-items: stretch;
+}
+
+.lux3d__intro {
+  display: flex;
+  flex-direction: column;
+}
+
+.step--wide {
+  grid-template-columns: 3.5rem minmax(0, 1fr);
+}
+
+/* ---------- left: text, controls at the bottom ---------- */
+.lux3d__intro p {
+  max-width: var(--story-measure);
+  line-height: 1.8;
+  color: var(--color-ink-soft);
+}
+
+.lux3d__intro p + p {
+  margin-top: 10px;
+}
+
+.lux3d .carousel__controls {
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+.lux3d__slide {
+  display: grid;
+  gap: 18px;
+}
+
+.lux3d__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lux3d__name {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.lux3d__count {
+  font-family: var(--font-display);
+  font-size: var(--text-small);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink-soft);
+}
+
+.lux3d__inputs,
+.lux3d__result {
+  margin: 0;
+}
+
+.lux3d__label {
+  margin-bottom: 8px;
+  font-size: var(--text-small);
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.lux3d__strip {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lux3d__input {
+  width: 64px;
+  text-align: center;
+}
+
+.lux3d__input img {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--color-card-edge);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.lux3d__kind {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--color-ink-soft);
+}
+
+.lux3d__kind--main {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.lux3d__source,
+.lux3d__note {
+  margin-top: 8px;
+  font-size: var(--text-small);
+  line-height: 1.6;
+  color: var(--color-ink-soft);
+}
+
+.lux3d__note {
+  color: var(--color-ink);
+}
+
+.lux3d__views {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.lux3d__view img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: var(--lux3d-plate);
+}
+
+/* ---------- step 2: one object in the grasp scene per slide, controls under the picture ---------- */
+.scene-slide__figure {
+  margin: 0;
+}
+
+.scene-slide__figure img {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.scene-slide__caption {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.scene-slide__name {
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+/* ---------- narrow screens: text above, slides below ---------- */
+@media (max-width: 860px) {
+  .step--wide {
+    grid-template-columns: 2.5rem minmax(0, 1fr);
+  }
+
+  .lux3d {
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 28px;
+  }
+}
+
+@media (max-width: 480px) {
+  .step--wide {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lux3d {
+    grid-column: 1;
+  }
+
+  .lux3d__input,
+  .lux3d__input img {
+    width: 52px;
+  }
+
+  .lux3d__input img {
+    height: 52px;
+  }
+}

@@ -1,0 +1,37 @@
+/* Design tokens. A cool, pale shop-window light around a wooden table; one blue accent for the
+   brand, the selection and the arm at work; status colours that always mean the same thing. */
+:root {
+  --color-window: #e6ebef; /* matches the scene's sky, so the canvas has no edge */
+  --color-ink: #1b2733;
+  --color-ink-soft: #566573;
+  --color-card: #fbfcfd;
+  --color-card-edge: #d3dbe2;
+  --color-accent: #1468c8; /* the one theme colour: the Image2Grasp blue */
+  --color-accent-wash: #e4eefa;
+  --color-pick: var(--color-accent); /* the selected object */
+  --color-pick-wash: var(--color-accent-wash);
+  --color-moving: var(--color-accent); /* the arm is working */
+  --color-lifted: #17865a; /* the object is up */
+  --color-missed: #b86f0d; /* knocked over or timed out */
+  --color-scrim: rgba(27, 39, 51, 0.42);
+
+  --font-zh: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', var(--font-zh);
+
+  /* type scale: 13 / 15 / 18 / 24 / 40 / 64 */
+  --text-small: 0.8125rem;
+  --text-body: 0.9375rem;
+  --text-lead: clamp(0.95rem, 0.9rem + 0.25vw, 1.125rem);
+  --text-title: clamp(1.75rem, 1.2rem + 2.4vw, 2.75rem);
+  --text-stat: clamp(2.5rem, 1.6rem + 3.6vw, 4rem);
+
+  --gutter: clamp(16px, 2.4vw, 32px);
+  --radius-capsule: 999px;
+  --radius-card: 22px 22px 14px 14px; /* blind-box card: rounded lid, squarer base */
+  --radius-panel: 18px;
+
+  --shadow-lift: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 10px 24px -12px rgba(27, 39, 51, 0.35);
+  --duration-fast: 140ms;
+  --duration-normal: 260ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
